@@ -1,3 +1,8 @@
+---
+name: webcast
+description: Convert URLs and local files to MP3 audio, markdown, or DOCX using local TTS. Use when asked to convert articles, web pages, or documents to audio or other formats.
+---
+
 # Webcast
 
 Convert URLs and local files (txt/md/docx) to MP3 audio, markdown, or DOCX using local TTS on Apple Silicon.

@@ -1,4 +1,4 @@
-"""CLI for webcast: extract articles and convert to audio/markdown/docx."""
+"""CLI for webcast: convert URLs and local files to audio/markdown/docx."""
 
 import sys
 from pathlib import Path
@@ -6,29 +6,13 @@ from pathlib import Path
 import click
 
 from webcast.audio import generate_output_filename
-from webcast.extract import extract_article, extract_markdown, format_article
+from webcast.extract import extract_from_file, extract_markdown, extract_article
 from webcast.tts import DEFAULT_SPEED, DEFAULT_VOICE, ChatterboxTTS, KokoroTTS
 
 
 @click.group()
 def cli():
-    """Convert web articles to listenable audio."""
-
-
-@cli.command()
-@click.argument("url")
-@click.option("-o", "--output", type=click.Path(), default=None, help="Output file (default: stdout)")
-@click.option("--format", "fmt", type=click.Choice(["txt", "json", "md"]), default="txt")
-def extract(url: str, output: str | None, fmt: str):
-    """Extract article text from a URL."""
-    article = extract_article(url)
-    text = format_article(article, fmt)
-
-    if output:
-        Path(output).write_text(text, encoding="utf-8")
-        click.echo(f"Saved to {output}", err=True)
-    else:
-        click.echo(text)
+    """Convert web articles and local files to listenable audio."""
 
 
 def _make_engine(model: str, ref_audio: str | None, voice: str, speed: float):
@@ -77,13 +61,35 @@ def tts(input_file: str | None, output: str | None, output_dir: str, model: str,
     click.echo(f"Saved to {mp3_path}", err=True)
 
 
+def _is_local_file(source: str) -> bool:
+    """Check if source looks like a local file path (not a URL)."""
+    return not source.startswith(("http://", "https://")) and Path(source).exists()
+
+
+def _extract_source(source: str, need_markdown: bool):
+    """Extract article from URL or local file.
+
+    Returns (article, markdown_or_none).
+    """
+    if _is_local_file(source):
+        path = Path(source)
+        click.echo(f"Reading from {path}...", err=True)
+        return extract_from_file(path)
+    else:
+        click.echo(f"Extracting article from {source}...", err=True)
+        if need_markdown:
+            return extract_markdown(source)
+        else:
+            return extract_article(source), None
+
+
 @cli.command()
-@click.argument("url")
+@click.argument("source")
 @click.option("-o", "--output", type=click.Path(), default=None, help="Output path")
 @click.option("--output-dir", type=click.Path(), default="./output", help="Output directory (default: ./output)")
 @click.option(
     "--format", "fmt",
-    type=click.Choice(["mp3", "md", "docx"]),
+    type=click.Choice(["mp3", "md", "txt", "docx"]),
     default="mp3",
     help="Output format (default: mp3)",
 )
@@ -91,18 +97,25 @@ def tts(input_file: str | None, output: str | None, output_dir: str, model: str,
 @click.option("--ref-audio", type=click.Path(exists=True), default=None, help="Reference audio for Chatterbox voice cloning")
 @click.option("--voice", default=DEFAULT_VOICE, help=f"Kokoro voice preset (default: {DEFAULT_VOICE})")
 @click.option("--speed", default=DEFAULT_SPEED, type=float, help="Kokoro speed multiplier (default: 1.0)")
-def convert(url: str, output: str | None, output_dir: str, fmt: str, model: str, ref_audio: str | None, voice: str, speed: float):
-    """Extract article from URL and convert to MP3, markdown, or DOCX."""
-    click.echo(f"Extracting article from {url}...", err=True)
-
-    if fmt in ("md", "docx"):
-        article, markdown = extract_markdown(url)
-    else:
-        article = extract_article(url)
+def convert(source: str, output: str | None, output_dir: str, fmt: str, model: str, ref_audio: str | None, voice: str, speed: float):
+    """Convert a URL or local file (txt/md/docx) to MP3, markdown, or DOCX."""
+    article, markdown = _extract_source(source, need_markdown=fmt in ("md", "docx"))
 
     click.echo(f"Title: {article.title}", err=True)
 
+    if fmt == "txt":
+        if output:
+            out_path = Path(output)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(article.text, encoding="utf-8")
+            click.echo(f"Saved to {out_path}", err=True)
+        else:
+            click.echo(article.text)
+        return
+
     if fmt == "md":
+        if markdown is None:
+            markdown = article.text
         if output:
             out_path = Path(output)
         else:
@@ -114,6 +127,8 @@ def convert(url: str, output: str | None, output_dir: str, fmt: str, model: str,
     elif fmt == "docx":
         from webcast.document import markdown_to_docx
 
+        if markdown is None:
+            markdown = article.text
         if output:
             out_path = Path(output)
         else:

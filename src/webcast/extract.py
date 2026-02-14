@@ -1,7 +1,9 @@
-"""Article extraction from web pages using trafilatura."""
+"""Article extraction from web pages and local files."""
 
 import json
+import subprocess
 from dataclasses import asdict, dataclass
+from pathlib import Path
 
 import trafilatura
 
@@ -95,6 +97,75 @@ def extract_markdown(url: str) -> tuple[Article, str]:
         markdown = header + "\n" + markdown
 
     return article, markdown
+
+
+def _title_from_path(path: Path) -> str:
+    """Derive a title from a file path."""
+    return path.stem.replace("-", " ").replace("_", " ").strip()
+
+
+def _pandoc_convert(path: Path, to_fmt: str) -> str:
+    """Convert a file using pandoc."""
+    result = subprocess.run(
+        ["pandoc", str(path), "-t", to_fmt],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"pandoc failed: {result.stderr}")
+    return result.stdout.strip()
+
+
+def _pandoc_convert_text(text: str, from_fmt: str, to_fmt: str) -> str:
+    """Convert text content using pandoc via stdin."""
+    result = subprocess.run(
+        ["pandoc", "-f", from_fmt, "-t", to_fmt],
+        input=text, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"pandoc failed: {result.stderr}")
+    return result.stdout.strip()
+
+
+def extract_from_file(path: Path) -> tuple[Article, str | None]:
+    """Extract article content from a local file.
+
+    Returns (Article, markdown_or_none). Markdown is returned for .md and .docx
+    inputs; None for .txt.
+    """
+    suffix = path.suffix.lower()
+
+    if suffix == ".txt":
+        text = path.read_text(encoding="utf-8").strip()
+        if not text:
+            raise RuntimeError(f"File is empty: {path}")
+        return Article(
+            title=_title_from_path(path), author=None, date=None,
+            text=text, url=str(path),
+        ), None
+
+    elif suffix == ".md":
+        markdown = path.read_text(encoding="utf-8").strip()
+        if not markdown:
+            raise RuntimeError(f"File is empty: {path}")
+        plain = _pandoc_convert_text(markdown, "markdown", "plain")
+        return Article(
+            title=_title_from_path(path), author=None, date=None,
+            text=plain, url=str(path),
+        ), markdown
+
+    elif suffix == ".docx":
+        text = _pandoc_convert(path, "plain")
+        if not text:
+            raise RuntimeError(f"No text extracted from: {path}")
+        markdown = _pandoc_convert(path, "markdown")
+        return Article(
+            title=_title_from_path(path), author=None, date=None,
+            text=text, url=str(path),
+        ), markdown
+
+    else:
+        raise RuntimeError(f"Unsupported file type: {suffix} (expected .txt, .md, or .docx)")
 
 
 def format_article(article: Article, fmt: str = "txt") -> str:

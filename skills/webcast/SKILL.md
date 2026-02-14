@@ -1,6 +1,6 @@
 # Webcast
 
-Convert web articles to listenable MP3 audio, markdown, or DOCX using local TTS (Kokoro on Apple Silicon).
+Convert web articles to MP3 audio, markdown, or DOCX using local TTS on Apple Silicon.
 
 ## Commands
 
@@ -11,13 +11,15 @@ webcast extract <url> -o article.txt           # to file
 webcast extract <url> --format md              # as markdown
 webcast extract <url> --format json            # as JSON
 
-# Convert text to speech
+# Convert text to speech (Chatterbox by default)
 webcast tts article.txt -o output.mp3          # from file
 echo "Hello world" | webcast tts -o hello.mp3  # from stdin
-webcast tts article.txt --voice af_bella       # different voice
+webcast tts article.txt --ref-audio voice.wav  # clone a voice
+webcast tts article.txt --model kokoro --voice af_bella  # use Kokoro
 
 # One-step: URL to MP3/markdown/DOCX
-webcast convert <url>                          # MP3 (default), auto-named in ./output/
+webcast convert <url>                          # MP3 (Chatterbox), auto-named in ./output/
+webcast convert <url> --model kokoro           # MP3 with Kokoro
 webcast convert <url> --format md              # rich markdown (links, images, tables)
 webcast convert <url> --format docx            # DOCX via pandoc
 webcast convert <url> -o episode.mp3           # custom output path
@@ -26,7 +28,19 @@ webcast convert <url> -o episode.mp3           # custom output path
 webcast extract <url> | webcast tts -o out.mp3
 ```
 
-## Voice Options
+## TTS Models
+
+### Chatterbox (default)
+- Expressive, natural-sounding speech
+- Voice cloning via `--ref-audio <wav>` (5+ seconds of reference audio)
+- Uses default voice when no reference audio provided
+
+### Kokoro
+- Fast, lightweight (82M params)
+- Named voice presets via `--voice`
+- Speed control via `--speed`
+
+## Kokoro Voice Presets
 
 American English:
 - `af_heart` (default), `af_bella`, `af_nova` — female
@@ -40,8 +54,10 @@ British English:
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--voice` | `af_heart` | Voice preset |
-| `--speed` | `1.0` | Speed multiplier (0.5–2.0) |
+| `--model` | `chatterbox` | TTS model: chatterbox, kokoro |
+| `--ref-audio` | — | Reference audio for Chatterbox voice cloning |
+| `--voice` | `af_heart` | Kokoro voice preset |
+| `--speed` | `1.0` | Kokoro speed multiplier (0.5–2.0) |
 | `--output-dir` | `./output` | Default output directory |
 | `-o, --output` | auto | Output file path |
 | `--format` (extract) | `txt` | Extract format: txt, json, md |
@@ -49,9 +65,14 @@ British English:
 
 ## Agent Usage
 
-To convert a blog post for a user:
+To convert a blog post (uses Chatterbox by default):
 ```
-webcast convert https://example.com/blog-post --voice af_heart
+webcast convert https://example.com/blog-post
+```
+
+To use Kokoro with a specific voice:
+```
+webcast convert https://example.com/blog-post --model kokoro --voice af_heart
 ```
 
 To save as markdown or DOCX:
@@ -60,16 +81,9 @@ webcast convert https://example.com/blog-post --format md
 webcast convert https://example.com/blog-post --format docx
 ```
 
-To extract and review text before converting:
-```
-webcast extract https://example.com/blog-post -o /tmp/article.txt
-# review/edit the text...
-webcast tts /tmp/article.txt -o podcast.mp3
-```
-
 ## Requirements
 
 - macOS with Apple Silicon
 - `ffmpeg` installed (`brew install ffmpeg`)
 - `pandoc` installed (`brew install pandoc`) — for DOCX output
-- First run downloads ~170MB Kokoro model
+- First run downloads Chatterbox Turbo model (~1GB) or Kokoro model (~170MB)

@@ -12,6 +12,14 @@ echo "Hello world" | ./webcast tts -o hello.mp3
 
 `webcast` is now TTS-only. Use `source-extract` for article extraction and document normalization.
 
+## Install
+
+```bash
+ln -sf "$(pwd)/webcast" ~/.local/bin/webcast
+```
+
+The wrapper resolves its real location, so it works both from this directory and through a symlink.
+
 ## Voice sample helper
 
 ```bash
